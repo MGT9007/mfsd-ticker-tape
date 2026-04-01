@@ -1,0 +1,247 @@
+/*
+ * MFSD Ticker Tape — Admin Styles
+ */
+
+/* ── LAYOUT ──────────────────────────────────────────────────────────────── */
+
+.mfsd-ticker-admin__title .dashicons {
+  font-size: 26px;
+  vertical-align: middle;
+  margin-right: 6px;
+  color: #C9A84C;
+}
+
+.mfsd-ticker-admin__layout {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 32px;
+  align-items: start;
+  margin-top: 24px;
+}
+
+@media (max-width: 1100px) {
+  .mfsd-ticker-admin__layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* ── MESSAGE TABLE ───────────────────────────────────────────────────────── */
+
+.mfsd-ticker-admin__table th {
+  background: #1d2327;
+  color: #fff;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.mfsd-ticker-admin__row--active {
+  background: #f0fff4;
+}
+
+.mfsd-ticker-admin__row--paused {
+  background: #fff8f0;
+  opacity: 0.7;
+}
+
+.mfsd-ticker-admin__message-text {
+  max-width: 360px;
+  word-break: break-word;
+}
+
+.mfsd-ticker-admin__order {
+  text-align: center;
+  font-weight: 700;
+  color: #666;
+  width: 60px;
+}
+
+.mfsd-ticker-admin__status {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.mfsd-ticker-admin__status--live {
+  background: #00a32a;
+  color: #fff;
+}
+
+.mfsd-ticker-admin__status--paused {
+  background: #b0b0b0;
+  color: #fff;
+}
+
+.mfsd-ticker-admin__role-badge {
+  display: inline-block;
+  background: #1d2327;
+  color: #C9A84C;
+  padding: 1px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  margin: 1px 2px;
+}
+
+.mfsd-ticker-admin__actions {
+  white-space: nowrap;
+}
+
+.mfsd-ticker-admin__actions .button {
+  margin-right: 4px;
+}
+
+.mfsd-ticker-admin__btn-delete {
+  color: #b32d2e !important;
+  border-color: #b32d2e !important;
+}
+
+.mfsd-ticker-admin__btn-delete:hover {
+  background: #b32d2e !important;
+  color: #fff !important;
+}
+
+
+/* ── FORM ────────────────────────────────────────────────────────────────── */
+
+.mfsd-ticker-admin__form-col {
+  background: #fff;
+  border: 1px solid #ccd0d4;
+  border-radius: 4px;
+  padding: 20px 24px;
+}
+
+.mfsd-ticker-admin__form-col h2 {
+  margin-top: 0;
+  border-bottom: 2px solid #C9A84C;
+  padding-bottom: 8px;
+}
+
+.mfsd-ticker-admin__field {
+  margin-bottom: 20px;
+}
+
+.mfsd-ticker-admin__field label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.mfsd-ticker-admin__field label .required {
+  color: #b32d2e;
+  margin-left: 2px;
+}
+
+.mfsd-ticker-admin__field textarea {
+  width: 100%;
+  min-height: 80px;
+  resize: vertical;
+}
+
+.mfsd-ticker-admin__field--inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.mfsd-ticker-admin__field--inline label {
+  margin-bottom: 0;
+  min-width: 120px;
+}
+
+.mfsd-ticker-admin__field--inline .description {
+  width: 100%;
+  margin-top: 2px;
+}
+
+.mfsd-ticker-admin__roles {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.mfsd-ticker-admin__role-check {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  font-weight: 400 !important;
+  cursor: pointer;
+}
+
+.mfsd-ticker-admin__role-check input {
+  margin: 0;
+  width: 16px;
+  height: 16px;
+}
+
+.mfsd-ticker-admin__submit {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding-top: 8px;
+  border-top: 1px solid #e0e0e0;
+}
+
+
+/* ── PREVIEW BAR ─────────────────────────────────────────────────────────── */
+
+.mfsd-ticker-admin__preview-wrap {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid #ccd0d4;
+}
+
+.mfsd-ticker-admin__preview {
+  display: flex;
+  align-items: center;
+  background: #111111;
+  border-radius: 4px;
+  overflow: hidden;
+  height: 36px;
+  margin-top: 8px;
+}
+
+.mfsd-ticker-admin__preview-label {
+  flex-shrink: 0;
+  background: #C9A84C;
+  color: #111;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0 16px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.mfsd-ticker-admin__preview-track {
+  flex: 1;
+  overflow: hidden;
+  height: 100%;
+  display: flex;
+  align-items: center;
+}
+
+.mfsd-ticker-admin__preview-content {
+  display: inline-block;
+  white-space: nowrap;
+  padding-left: 24px;
+  color: #F5F5F5;
+  font-size: 13px;
+  font-family: Arial, sans-serif;
+  animation: mfsd-preview-scroll 20s linear infinite;
+}
+
+@keyframes mfsd-preview-scroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}

@@ -1,0 +1,68 @@
+/*
+ * MFSD Ticker Tape — Frontend Styles
+ * =====================================
+ * The theme's base.css provides the structural .mfsd-ticker rules
+ * and the variables.css provides all colour tokens.
+ *
+ * This file handles only the animation and any plugin-specific
+ * presentational details that aren't in the theme.
+ */
+
+/* ── SCROLL ANIMATION ────────────────────────────────────────────────────── */
+
+.mfsd-ticker__content {
+  display: inline-block;
+  white-space: nowrap;
+  padding-left: 100%;
+  animation: mfsd-ticker-scroll linear infinite;
+  /* Duration is set inline via PHP based on message count */
+  animation-duration: 30s;
+}
+
+.mfsd-ticker__content:hover {
+  animation-play-state: paused;
+}
+
+@keyframes mfsd-ticker-scroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+  /*
+   * Content is duplicated in the markup so translateX(-50%) returns
+   * to the visual start — creating a seamless infinite loop.
+   */
+}
+
+
+/* ── LABEL ICON ──────────────────────────────────────────────────────────── */
+
+.mfsd-ticker__label-icon {
+  font-style: normal;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.mfsd-ticker__label-icon:first-child {
+  margin-right: 4px;
+}
+
+.mfsd-ticker__label-icon:last-child {
+  margin-left: 4px;
+}
+
+
+/* ── PAUSE ON HOVER INDICATOR ────────────────────────────────────────────── */
+
+.mfsd-ticker__track:hover .mfsd-ticker__content {
+  animation-play-state: paused;
+}
+
+
+/* ── ACCESSIBILITY ───────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .mfsd-ticker__content {
+    animation: none;
+    padding-left: var(--space-md, 16px);
+    white-space: normal;
+  }
+}
