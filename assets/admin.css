@@ -114,6 +114,7 @@
   border: 1px solid #ccd0d4;
   border-radius: 4px;
   padding: 20px 24px;
+  max-width: 700px;
 }
 
 .mfsd-ticker-admin__form-col h2 {
@@ -140,7 +141,10 @@
 .mfsd-ticker-admin__field textarea {
   width: 100%;
   min-height: 80px;
+  min-width: 500px;
   resize: vertical;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 .mfsd-ticker-admin__field--inline {
