@@ -62,11 +62,11 @@ function mfsd_ticker_mfsd_menu_exists(): bool {
 // ─── ADMIN ASSETS ────────────────────────────────────────────────────────────
 
 add_action( 'admin_enqueue_scripts', 'mfsd_ticker_admin_assets' );
-function mfsd_ticker_admin_assets( string $hook ): void {
-    // The hook will contain 'mfsd-ticker-tape' whether it's a top-level
-    // or submenu page — both produce hooks like toplevel_page_mfsd-ticker-tape
-    // or mfsd-admin_page_mfsd-ticker-tape.
-    if ( strpos( $hook, 'mfsd-ticker-tape' ) === false ) return;
+function mfsd_ticker_admin_assets(): void {
+    $screen = get_current_screen();
+    if ( ! $screen || strpos( $screen->id, 'mfsd-ticker-tape' ) === false ) {
+        return;
+    }
 
     wp_enqueue_style(
         'mfsd-ticker-admin',
