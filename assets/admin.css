@@ -131,12 +131,14 @@
 
 .mfsd-ticker-admin__field {
   margin-bottom: 20px;
+  clear: both;
 }
 
-.mfsd-ticker-admin__field label {
+.mfsd-ticker-admin__field > label:first-child {
   display: block;
   font-weight: 600;
   margin-bottom: 6px;
+  font-size: 13px;
 }
 
 .mfsd-ticker-admin__field label .required {
@@ -145,15 +147,18 @@
 }
 
 .mfsd-ticker-admin__field textarea,
-#mfsd_ticker_message {
-  width: 100% !important;
-  min-width: 400px;
-  min-height: 80px;
-  resize: vertical;
-  font-size: 14px;
-  line-height: 1.5;
-  padding: 8px 10px;
-  box-sizing: border-box;
+#mfsd_ticker_message,
+.wrap #mfsd_ticker_message,
+.mfsd-ticker-admin #mfsd_ticker_message {
+  width: 600px !important;
+  min-width: 600px !important;
+  min-height: 80px !important;
+  resize: vertical !important;
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+  padding: 8px 10px !important;
+  box-sizing: border-box !important;
+  display: block !important;
 }
 
 .mfsd-ticker-admin__field--inline {
