@@ -310,9 +310,10 @@ function mfsd_ticker_render_admin_page(): void {
               </label>
               <textarea id="mfsd_ticker_message"
                         name="message"
-                        rows="3"
+                        rows="4"
                         maxlength="500"
-                        required><?php echo esc_textarea( $form['message'] ); ?></textarea>
+                        required
+                        style="width:100%;min-width:500px;font-size:14px;padding:8px;line-height:1.5;"><?php echo esc_textarea( $form['message'] ); ?></textarea>
               <p class="description">
                 <?php esc_html_e( 'You can use emoji at the start for visual flair, e.g. 🚀 🔥 🎮', 'mfsd-ticker-tape' ); ?>
               </p>
