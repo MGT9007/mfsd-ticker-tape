@@ -144,13 +144,16 @@
   margin-left: 2px;
 }
 
-.mfsd-ticker-admin__field textarea {
-  width: 100%;
+.mfsd-ticker-admin__field textarea,
+#mfsd_ticker_message {
+  width: 100% !important;
+  min-width: 400px;
   min-height: 80px;
-  min-width: 500px;
   resize: vertical;
   font-size: 14px;
   line-height: 1.5;
+  padding: 8px 10px;
+  box-sizing: border-box;
 }
 
 .mfsd-ticker-admin__field--inline {
