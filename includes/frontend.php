@@ -23,6 +23,11 @@ function mfsd_ticker_render_frontend(): void {
         return;
     }
 
+     // ADD THIS — only display on the home page
+    if ( ! is_front_page() ) {
+        return;
+    }
+    
     // Get the current user's MFSD role.
     // Uses the theme helper if available, falls back to WordPress native.
     if ( function_exists( 'mfsd_get_user_role' ) ) {
