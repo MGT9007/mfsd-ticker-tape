@@ -76,8 +76,9 @@ function mfsd_ticker_render_frontend(): void {
     }
     $scroll_content = implode( $separator, $texts );
 
-    // Animation speed: base 30s + 2s per message so longer lists scroll slower.
-    $speed = 30 + ( count( $messages ) * 2 );
+    // Animation speed: base 30s + 4s per item in the tape.
+    // We count actual text items (headlines expanded) not just DB rows.
+    $speed = 30 + ( count( $texts ) * 4 );
 
     // Icon — differs between gamer and corporate themes.
     $is_student = ( $role === 'student' );
