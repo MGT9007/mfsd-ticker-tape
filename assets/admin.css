@@ -183,8 +183,11 @@
 /* ── Textarea ── */
 
 .mfsd-ticker-admin__field textarea,
-#mfsd_ticker_message {
-  width: 100% !important;
+#mfsd_ticker_message,
+.wrap #mfsd_ticker_message,
+.mfsd-ticker-admin #mfsd_ticker_message {
+  width: 600px !important;
+  min-width: 600px !important;
   min-height: 80px !important;
   resize: vertical !important;
   font-size: 14px !important;
