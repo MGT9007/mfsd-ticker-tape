@@ -13,13 +13,21 @@
 
 .mfsd-ticker-admin__layout {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: 32px;
+  align-items: start;
   margin-top: 24px;
 }
 
 .mfsd-ticker-admin__list-col {
-  width: 100%;
+  flex: 1;
+  min-width: 400px;
+}
+
+@media (max-width: 1100px) {
+  .mfsd-ticker-admin__layout {
+    flex-direction: column;
+  }
 }
 
 
@@ -43,7 +51,7 @@
 }
 
 .mfsd-ticker-admin__message-text {
-  max-width: 340px;
+  max-width: 360px;
   word-break: break-word;
 }
 
@@ -140,15 +148,19 @@
 
 /* ── FORM ────────────────────────────────────────────────────────────────── */
 
+/*
+ * The form column is 440px wide but the textarea is forced wider so it
+ * spans the full admin content area — deliberately overflowing the column.
+ * This matches the original plugin design.
+ */
 .mfsd-ticker-admin__form-col {
   background: #fff;
   border: 1px solid #ccd0d4;
   border-radius: 4px;
   padding: 20px 24px;
-  width: 100%;
-  max-width: 100%;
-  box-sizing: border-box;
+  width: 440px;
   flex-shrink: 0;
+  overflow: visible;
 }
 
 .mfsd-ticker-admin__form-col h2 {
@@ -174,15 +186,17 @@
   margin-left: 2px;
 }
 
-/* ── Textarea ── */
-
+/*
+ * The textarea overflows the 440px form column intentionally.
+ * calc(100vw - 260px) accounts for the WP admin sidebar (~160px) plus padding.
+ */
 .mfsd-ticker-admin__field textarea,
 #mfsd_ticker_message,
 .wrap #mfsd_ticker_message,
 .mfsd-ticker-admin #mfsd_ticker_message {
-  width: 100% !important;
-  max-width: 900px !important;
-  min-width: 300px !important;
+  width: calc(100vw - 260px) !important;
+  max-width: 1200px !important;
+  min-width: 600px !important;
   min-height: 80px !important;
   resize: vertical !important;
   font-size: 14px !important;
@@ -191,8 +205,6 @@
   box-sizing: border-box !important;
   display: block !important;
 }
-
-/* ── Inline field ── */
 
 .mfsd-ticker-admin__field--inline {
   display: flex;
@@ -210,8 +222,6 @@
   width: 100%;
   margin-top: 2px;
 }
-
-/* ── Roles checkboxes ── */
 
 .mfsd-ticker-admin__roles {
   display: flex;
@@ -341,8 +351,6 @@
   cursor: default;
   font-style: italic;
 }
-
-/* ── Submit row ── */
 
 .mfsd-ticker-admin__submit {
   display: flex;
