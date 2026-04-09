@@ -170,6 +170,16 @@
   color: #fff !important;
 }
 
+.mfsd-ticker-admin__btn-refresh {
+  color: #0073aa !important;
+  border-color: #0073aa !important;
+}
+
+.mfsd-ticker-admin__btn-refresh:hover {
+  background: #0073aa !important;
+  color: #fff !important;
+}
+
 
 /* ── FORM ────────────────────────────────────────────────────────────────── */
 

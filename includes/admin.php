@@ -261,6 +261,25 @@ function mfsd_ticker_handle_toggle(): void {
     exit;
 }
 
+add_action( 'admin_post_mfsd_ticker_clear_rss', 'mfsd_ticker_handle_clear_rss' );
+function mfsd_ticker_handle_clear_rss(): void {
+    check_admin_referer( 'mfsd_ticker_clear_rss' );
+
+    if ( ! current_user_can( 'manage_options' ) ) {
+        wp_die( __( 'Unauthorised', 'mfsd-ticker-tape' ) );
+    }
+
+    $id  = (int) ( $_GET['id'] ?? 0 );
+    $msg = $id > 0 ? mfsd_ticker_get_message( $id ) : null;
+
+    if ( $msg && ! empty( $msg['feed_url'] ) ) {
+        mfsd_ticker_clear_rss_cache( $msg['feed_url'], (int) ( $msg['feed_limit'] ?? 5 ) );
+    }
+
+    wp_redirect( add_query_arg( [ 'page' => 'mfsd-ticker-tape', 'msg' => 'feed_cleared' ], admin_url( 'admin.php' ) ) );
+    exit;
+}
+
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 
@@ -329,7 +348,8 @@ function mfsd_ticker_render_admin_page(): void {
             'added'   => [ 'success', __( 'Message added.', 'mfsd-ticker-tape' ) ],
             'updated' => [ 'success', __( 'Message updated.', 'mfsd-ticker-tape' ) ],
             'deleted' => [ 'success', __( 'Message deleted.', 'mfsd-ticker-tape' ) ],
-            'toggled' => [ 'success', __( 'Message status toggled.', 'mfsd-ticker-tape' ) ],
+            'toggled'      => [ 'success', __( 'Message status toggled.', 'mfsd-ticker-tape' ) ],
+            'feed_cleared' => [ 'success', __( 'RSS cache cleared — fresh headlines will load on next page view.', 'mfsd-ticker-tape' ) ],
         ];
         $key = sanitize_key( $_GET['msg'] );
         if ( isset( $notices[ $key ] ) ) $notice = $notices[ $key ];
@@ -468,6 +488,15 @@ function mfsd_ticker_render_admin_page(): void {
                          onclick="return confirm('<?php esc_attr_e( 'Delete this message? This cannot be undone.', 'mfsd-ticker-tape' ); ?>')">
                         <?php esc_html_e( 'Delete', 'mfsd-ticker-tape' ); ?>
                       </a>
+                      <?php if ( $mtype === 'rss_feed' && ! empty( $msg['feed_url'] ) ) : ?>
+                      <a href="<?php echo esc_url( wp_nonce_url(
+                          add_query_arg( [ 'action' => 'mfsd_ticker_clear_rss', 'id' => $msg['id'] ], admin_url( 'admin-post.php' ) ),
+                          'mfsd_ticker_clear_rss'
+                      ) ); ?>" class="button button-small mfsd-ticker-admin__btn-refresh"
+                         title="<?php esc_attr_e( 'Clear cached headlines and fetch fresh ones', 'mfsd-ticker-tape' ); ?>">
+                        <?php esc_html_e( '↺ Refresh Feed', 'mfsd-ticker-tape' ); ?>
+                      </a>
+                      <?php endif; ?>
                     </td>
                   </tr>
                 <?php endforeach; ?>
