@@ -23,46 +23,49 @@ function mfsd_ticker_render_frontend(): void {
         return;
     }
 
-     // ADD THIS — only display on the home page
+    // Only display on the home page.
     if ( ! is_front_page() ) {
         return;
     }
-    
+
+    $user = wp_get_current_user();
+
     // Get the current user's MFSD role.
     // Uses the theme helper if available, falls back to WordPress native.
     if ( function_exists( 'mfsd_get_user_role' ) ) {
         $role = mfsd_get_user_role();
     } else {
-        $user  = wp_get_current_user();
         $roles = (array) $user->roles;
-        if ( in_array( 'administrator', $roles, true ) ) $role = 'admin';
-        elseif ( in_array( 'teacher', $roles, true ) )   $role = 'teacher';
-        elseif ( in_array( 'parent', $roles, true ) )    $role = 'parent';
-        elseif ( in_array( 'student', $roles, true ) )   $role = 'student';
-        else                                              $role = 'parent';
+        if ( in_array( 'administrator', $roles, true ) )     $role = 'admin';
+        elseif ( in_array( 'teacher', $roles, true ) )       $role = 'teacher';
+        elseif ( in_array( 'parent', $roles, true ) )        $role = 'parent';
+        elseif ( in_array( 'student', $roles, true ) )       $role = 'student';
+        else                                                  $role = 'parent';
     }
 
-    // Get messages for this role.
-    $messages = mfsd_ticker_get_messages_for_role( $role );
+    // Get messages for this user (role + course enrolment + user-specific).
+    $messages = mfsd_ticker_get_messages_for_user( $role, $user );
 
     // If no messages, render nothing — the theme's :empty CSS hides the zone.
     if ( empty( $messages ) ) {
         return;
     }
 
-    // Build the scrolling text — all messages joined with a separator.
+    // Build the scrolling text — resolve tokens per message then join.
     $separator = ' &nbsp;&nbsp;&bull;&nbsp;&nbsp; ';
-    $texts     = array_map(
-        fn( $m ) => esc_html( $m['message'] ),
-        array_values( $messages )
-    );
+    $texts     = [];
+    foreach ( array_values( $messages ) as $msg ) {
+        $course_id = (int) ( $msg['course_id'] ?? 0 );
+        // Resolve personalisation tokens then escape any remaining unresolved HTML.
+        $resolved  = mfsd_ticker_resolve_tokens( $msg['message'], $user, $course_id );
+        $texts[]   = $resolved;
+    }
     $scroll_content = implode( $separator, $texts );
 
     // Animation speed: base 30s + 2s per message so longer lists scroll slower.
     $speed = 30 + ( count( $messages ) * 2 );
 
-    // Icon — differs between gamer and corporate (theme body class handles
-    // colour but we give the gamer theme a sparkle icon).
+    // Icon — differs between gamer and corporate themes.
     $is_student = ( $role === 'student' );
     $icon       = $is_student ? '⚡' : '★';
     ?>

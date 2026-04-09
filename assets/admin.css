@@ -51,7 +51,7 @@
 }
 
 .mfsd-ticker-admin__message-text {
-  max-width: 360px;
+  max-width: 340px;
   word-break: break-word;
 }
 
@@ -80,6 +80,40 @@
 .mfsd-ticker-admin__status--paused {
   background: #b0b0b0;
   color: #fff;
+}
+
+/* ── TYPE BADGES ─────────────────────────────────────────────────────────── */
+
+.mfsd-ticker-admin__type-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.mfsd-ticker-admin__type-badge--standard {
+  background: #1d2327;
+  color: #C9A84C;
+}
+
+.mfsd-ticker-admin__type-badge--course_enrolment {
+  background: #1e4d78;
+  color: #a8d4f5;
+}
+
+.mfsd-ticker-admin__type-badge--user_specific {
+  background: #4a1e78;
+  color: #dbaaf5;
+}
+
+.mfsd-ticker-admin__target-info {
+  display: block;
+  margin-top: 4px;
+  color: #555;
+  font-size: 12px;
 }
 
 .mfsd-ticker-admin__role-badge {
@@ -146,12 +180,11 @@
   margin-left: 2px;
 }
 
+/* ── Textarea ── */
+
 .mfsd-ticker-admin__field textarea,
-#mfsd_ticker_message,
-.wrap #mfsd_ticker_message,
-.mfsd-ticker-admin #mfsd_ticker_message {
-  width: 600px !important;
-  min-width: 600px !important;
+#mfsd_ticker_message {
+  width: 100% !important;
   min-height: 80px !important;
   resize: vertical !important;
   font-size: 14px !important;
@@ -160,6 +193,8 @@
   box-sizing: border-box !important;
   display: block !important;
 }
+
+/* ── Inline field ── */
 
 .mfsd-ticker-admin__field--inline {
   display: flex;
@@ -178,6 +213,8 @@
   margin-top: 2px;
 }
 
+/* ── Roles checkboxes ── */
+
 .mfsd-ticker-admin__roles {
   display: flex;
   flex-direction: column;
@@ -193,11 +230,121 @@
   cursor: pointer;
 }
 
-.mfsd-ticker-admin__role-check input {
+.mfsd-ticker-admin__role-check input[type="checkbox"],
+.mfsd-ticker-admin__role-check input[type="radio"] {
   margin: 0;
   width: 16px;
   height: 16px;
 }
+
+/* ── Message type radios ── */
+
+.mfsd-ticker-admin__type-radios {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ── Token panel ─────────────────────────────────────────────────────────── */
+
+.mfsd-ticker-admin__token-panel {
+  background: #f9f9f9;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 12px 14px;
+}
+
+.mfsd-ticker-admin__token-panel > label:first-child {
+  color: #3c434a;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.mfsd-ticker-admin__token-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.mfsd-token-btn {
+  font-family: monospace !important;
+  font-size: 12px !important;
+  background: #fff !important;
+  border-color: #C9A84C !important;
+  color: #4a3000 !important;
+}
+
+.mfsd-token-btn:hover {
+  background: #C9A84C !important;
+  color: #111 !important;
+}
+
+.mfsd-ticker-admin__token-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.mfsd-ticker-admin__token-table td {
+  padding: 3px 6px;
+  vertical-align: top;
+}
+
+.mfsd-ticker-admin__token-table td:first-child {
+  white-space: nowrap;
+  color: #b32d2e;
+  width: 130px;
+}
+
+/* ── User search ─────────────────────────────────────────────────────────── */
+
+.mfsd-ticker-admin__user-search-wrap {
+  position: relative;
+}
+
+.mfsd-ticker-admin__user-search-wrap input[type="text"] {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.mfsd-ticker-admin__user-results {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  background: #fff;
+  border: 1px solid #ccd0d4;
+  border-top: none;
+  border-radius: 0 0 4px 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 220px;
+  overflow-y: auto;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.12);
+}
+
+.mfsd-ticker-admin__user-results li {
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.mfsd-ticker-admin__user-results li:hover {
+  background: #f0f7ff;
+}
+
+.mfsd-ticker-admin__user-results li.mfsd-no-results {
+  color: #888;
+  cursor: default;
+  font-style: italic;
+}
+
+/* ── Submit row ── */
 
 .mfsd-ticker-admin__submit {
   display: flex;
