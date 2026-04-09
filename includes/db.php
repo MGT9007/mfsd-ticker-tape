@@ -75,26 +75,38 @@ function mfsd_ticker_maybe_upgrade(): void {
     }
 
     global $wpdb;
-    $table   = $wpdb->prefix . MFSD_TICKER_TABLE;
-    $columns = $wpdb->get_col( "SHOW COLUMNS FROM {$table}", 0 );
+    $table = $wpdb->prefix . MFSD_TICKER_TABLE;
+
+    // If the table doesn't exist yet (fresh install not yet activated),
+    // create it now rather than trying to ALTER a missing table.
+    $table_exists = $wpdb->get_var(
+        $wpdb->prepare( 'SHOW TABLES LIKE %s', $table )
+    );
+
+    if ( ! $table_exists ) {
+        mfsd_ticker_create_table();
+        return;
+    }
+
+    $columns = $wpdb->get_col( "SHOW COLUMNS FROM `{$table}`", 0 );
 
     if ( ! in_array( 'message_type', $columns, true ) ) {
-        $wpdb->query( "ALTER TABLE {$table} ADD COLUMN message_type VARCHAR(20) NOT NULL DEFAULT 'standard' AFTER roles" );
+        $wpdb->query( "ALTER TABLE `{$table}` ADD COLUMN message_type VARCHAR(20) NOT NULL DEFAULT 'standard' AFTER roles" );
     }
     if ( ! in_array( 'course_id', $columns, true ) ) {
-        $wpdb->query( "ALTER TABLE {$table} ADD COLUMN course_id BIGINT NOT NULL DEFAULT 0 AFTER message_type" );
+        $wpdb->query( "ALTER TABLE `{$table}` ADD COLUMN course_id BIGINT NOT NULL DEFAULT 0 AFTER message_type" );
     }
     if ( ! in_array( 'target_user_id', $columns, true ) ) {
-        $wpdb->query( "ALTER TABLE {$table} ADD COLUMN target_user_id BIGINT NOT NULL DEFAULT 0 AFTER course_id" );
+        $wpdb->query( "ALTER TABLE `{$table}` ADD COLUMN target_user_id BIGINT NOT NULL DEFAULT 0 AFTER course_id" );
     }
     if ( ! in_array( 'feed_url', $columns, true ) ) {
-        $wpdb->query( "ALTER TABLE {$table} ADD COLUMN feed_url VARCHAR(1000) NOT NULL DEFAULT '' AFTER target_user_id" );
+        $wpdb->query( "ALTER TABLE `{$table}` ADD COLUMN feed_url VARCHAR(1000) NOT NULL DEFAULT '' AFTER target_user_id" );
     }
     if ( ! in_array( 'feed_limit', $columns, true ) ) {
-        $wpdb->query( "ALTER TABLE {$table} ADD COLUMN feed_limit TINYINT NOT NULL DEFAULT 5 AFTER feed_url" );
+        $wpdb->query( "ALTER TABLE `{$table}` ADD COLUMN feed_limit TINYINT NOT NULL DEFAULT 5 AFTER feed_url" );
     }
     if ( ! in_array( 'feed_prefix', $columns, true ) ) {
-        $wpdb->query( "ALTER TABLE {$table} ADD COLUMN feed_prefix VARCHAR(200) NOT NULL DEFAULT '' AFTER feed_limit" );
+        $wpdb->query( "ALTER TABLE `{$table}` ADD COLUMN feed_prefix VARCHAR(200) NOT NULL DEFAULT '' AFTER feed_limit" );
     }
 
     update_option( 'mfsd_ticker_db_version', MFSD_TICKER_DB_VERSION );
@@ -192,7 +204,7 @@ function mfsd_ticker_fetch_rss_headlines( string $feed_url, int $limit = 5, stri
         return [];
     }
 
-    $limit        = max( 1, min( 20, $limit ) );
+    $limit         = max( 1, min( 20, $limit ) );
     $transient_key = 'mfsd_rss_' . md5( $feed_url . $limit );
 
     $cached = get_transient( $transient_key );
@@ -200,29 +212,51 @@ function mfsd_ticker_fetch_rss_headlines( string $feed_url, int $limit = 5, stri
         return $cached;
     }
 
-    // WordPress includes SimplePie via fetch_feed().
-    if ( ! function_exists( 'fetch_feed' ) ) {
-        require_once ABSPATH . WPINC . '/feed.php';
-    }
+    // Use WordPress HTTP API directly — more reliable than SimplePie on all hosts.
+    $response = wp_remote_get( $feed_url, [
+        'timeout'    => 10,
+        'user-agent' => 'Mozilla/5.0 (compatible; MFSD Ticker/' . MFSD_TICKER_VERSION . '; +https://mfsd.me)',
+    ] );
 
-    $feed = fetch_feed( $feed_url );
-
-    if ( is_wp_error( $feed ) ) {
-        // Cache an empty result for 5 minutes to avoid hammering a broken feed.
+    if ( is_wp_error( $response ) || wp_remote_retrieve_response_code( $response ) !== 200 ) {
+        // Cache failure briefly to avoid hammering a broken feed.
         set_transient( $transient_key, [], 5 * MINUTE_IN_SECONDS );
         return [];
     }
 
-    $feed->set_cache_duration( 30 * MINUTE_IN_SECONDS );
-    $max_items = $feed->get_item_quantity( $limit );
-    $items     = $feed->get_items( 0, $max_items );
+    $body = wp_remote_retrieve_body( $response );
+    if ( empty( $body ) ) {
+        set_transient( $transient_key, [], 5 * MINUTE_IN_SECONDS );
+        return [];
+    }
+
+    // Parse the XML safely.
+    libxml_use_internal_errors( true );
+    $xml = simplexml_load_string( $body );
+    libxml_clear_errors();
+
+    if ( $xml === false ) {
+        set_transient( $transient_key, [], 5 * MINUTE_IN_SECONDS );
+        return [];
+    }
+
+    // Support both RSS 2.0 (channel/item) and Atom (entry).
+    $items = [];
+    if ( isset( $xml->channel->item ) ) {
+        $items = $xml->channel->item; // RSS 2.0
+    } elseif ( isset( $xml->entry ) ) {
+        $items = $xml->entry; // Atom
+    }
 
     $headlines = [];
     $prefix    = trim( $prefix );
+    $count     = 0;
     foreach ( $items as $item ) {
-        $title = wp_strip_all_tags( $item->get_title() );
+        if ( $count >= $limit ) break;
+        $title = wp_strip_all_tags( (string) $item->title );
         if ( $title ) {
             $headlines[] = $prefix !== '' ? $prefix . ' ' . $title : $title;
+            $count++;
         }
     }
 
