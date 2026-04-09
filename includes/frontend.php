@@ -55,10 +55,24 @@ function mfsd_ticker_render_frontend(): void {
     $separator = ' &nbsp;&nbsp;&bull;&nbsp;&nbsp; ';
     $texts     = [];
     foreach ( array_values( $messages ) as $msg ) {
+        $type      = $msg['message_type'] ?? 'standard';
         $course_id = (int) ( $msg['course_id'] ?? 0 );
-        // Resolve personalisation tokens then escape any remaining unresolved HTML.
-        $resolved  = mfsd_ticker_resolve_tokens( $msg['message'], $user, $course_id );
-        $texts[]   = $resolved;
+
+        if ( $type === 'rss_feed' ) {
+            // Expand RSS feed into individual headline items.
+            $headlines = mfsd_ticker_fetch_rss_headlines(
+                $msg['feed_url']    ?? '',
+                (int) ( $msg['feed_limit']  ?? 5 ),
+                $msg['feed_prefix'] ?? ''
+            );
+            foreach ( $headlines as $headline ) {
+                $texts[] = esc_html( $headline );
+            }
+        } else {
+            // Resolve personalisation tokens then output.
+            $resolved = mfsd_ticker_resolve_tokens( $msg['message'], $user, $course_id );
+            $texts[]  = $resolved;
+        }
     }
     $scroll_content = implode( $separator, $texts );
 
