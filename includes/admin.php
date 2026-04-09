@@ -396,8 +396,8 @@ function mfsd_ticker_render_admin_page(): void {
 
       <div class="mfsd-ticker-admin__layout">
 
-        <?php /* ── LEFT: Message list ────────────────────────────────────── */ ?>
-        <div class="mfsd-ticker-admin__list-col">
+        <?php /* ── TOP: Message list ────────────────────────────────────── */ ?>
+        <div class="mfsd-ticker-admin__list-col" style="width:100%;min-width:0;flex:none;">
 
           <h2><?php esc_html_e( 'All Messages', 'mfsd-ticker-tape' ); ?></h2>
 
@@ -484,8 +484,8 @@ function mfsd_ticker_render_admin_page(): void {
 
         </div><?php /* end list col */ ?>
 
-        <?php /* ── RIGHT: Add / Edit form ────────────────────────────────── */ ?>
-        <div class="mfsd-ticker-admin__form-col">
+        <?php /* ── BELOW: Add / Edit form (full width) ────────────────── */ ?>
+        <div class="mfsd-ticker-admin__form-col" style="width:100%;max-width:100%;box-sizing:border-box;">
 
           <h2>
             <?php echo $edit_id

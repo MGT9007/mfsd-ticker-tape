@@ -7,7 +7,7 @@
  *               created in the admin and assigned to one, multiple, or all
  *               user roles. The plugin hooks into the mfsd_ticker_tape_bar
  *               action registered in the myfutureself-theme.
- * Version:      2.1.1
+ * Version:      2.1.2
  * Author:       MisterT9007
  * Author URI:   https://s47d.co.uk
  * Text Domain:  mfsd-ticker-tape
@@ -19,7 +19,7 @@ defined( 'ABSPATH' ) || exit;
 
 // ─── CONSTANTS ───────────────────────────────────────────────────────────────
 
-define( 'MFSD_TICKER_VERSION', '2.1.1' );
+define( 'MFSD_TICKER_VERSION', '2.1.2' );
 define( 'MFSD_TICKER_DIR',     plugin_dir_path( __FILE__ ) );
 define( 'MFSD_TICKER_URI',     plugin_dir_url( __FILE__ ) );
 define( 'MFSD_TICKER_TABLE',   'mfsd_ticker_messages' );
