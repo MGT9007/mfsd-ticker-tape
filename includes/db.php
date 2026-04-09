@@ -218,27 +218,41 @@ function mfsd_ticker_fetch_rss_headlines( string $feed_url, int $limit = 5, stri
         'user-agent' => 'Mozilla/5.0 (compatible; MFSD Ticker/' . MFSD_TICKER_VERSION . '; +https://mfsd.me)',
     ] );
 
-    if ( is_wp_error( $response ) || wp_remote_retrieve_response_code( $response ) !== 200 ) {
-        // Cache failure briefly to avoid hammering a broken feed.
+    if ( is_wp_error( $response ) ) {
+        error_log( 'MFSD RSS ERROR: wp_error - ' . $response->get_error_message() . ' for ' . $feed_url );
+        set_transient( $transient_key, [], 5 * MINUTE_IN_SECONDS );
+        return [];
+    }
+
+    $http_code = wp_remote_retrieve_response_code( $response );
+    if ( $http_code !== 200 ) {
+        error_log( 'MFSD RSS ERROR: HTTP ' . $http_code . ' for ' . $feed_url );
         set_transient( $transient_key, [], 5 * MINUTE_IN_SECONDS );
         return [];
     }
 
     $body = wp_remote_retrieve_body( $response );
     if ( empty( $body ) ) {
+        error_log( 'MFSD RSS ERROR: empty body for ' . $feed_url );
         set_transient( $transient_key, [], 5 * MINUTE_IN_SECONDS );
         return [];
     }
+
+    error_log( 'MFSD RSS: got ' . strlen( $body ) . ' bytes from ' . $feed_url );
 
     // Parse the XML safely.
     libxml_use_internal_errors( true );
     $xml = simplexml_load_string( $body );
+    $xml_errors = libxml_get_errors();
     libxml_clear_errors();
 
     if ( $xml === false ) {
+        error_log( 'MFSD RSS ERROR: XML parse failed for ' . $feed_url . ' - ' . print_r( $xml_errors, true ) );
         set_transient( $transient_key, [], 5 * MINUTE_IN_SECONDS );
         return [];
     }
+
+    error_log( 'MFSD RSS: XML parsed OK, checking for items' );
 
     // Support both RSS 2.0 (channel/item) and Atom (entry).
     $items = [];
