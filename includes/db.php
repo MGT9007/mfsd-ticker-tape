@@ -12,9 +12,12 @@
  *   roles          VARCHAR(500) NOT NULL      — JSON array of role slugs, e.g. ["student","parent"]
  *                                               Use ["all"] to target every role
  *   message_type   VARCHAR(20) DEFAULT 'standard'
- *                                             — 'standard' | 'course_enrolment'
+ *                                             — 'standard' | 'course_enrolment' | 'user_specific' | 'rss_feed'
  *   course_id      BIGINT DEFAULT 0           — Post ID of the course (used when message_type = course_enrolment)
  *   target_user_id BIGINT DEFAULT 0           — WP user ID for user-specific messages (0 = no restriction)
+ *   feed_url       VARCHAR(1000) DEFAULT ''   — RSS feed URL (used when message_type = rss_feed)
+ *   feed_limit     TINYINT DEFAULT 5          — Max headlines to pull from the feed
+ *   feed_prefix    VARCHAR(200) DEFAULT ''    — Optional label prepended to each headline e.g. "📰 BBC:"
  *   active         TINYINT(1) DEFAULT 1       — 1 = live, 0 = paused
  *   sort_order     INT DEFAULT 0              — Display order (lower = first)
  *   created_at     DATETIME DEFAULT NOW()
@@ -25,7 +28,7 @@ defined( 'ABSPATH' ) || exit;
 
 // ─── SCHEMA VERSION ──────────────────────────────────────────────────────────
 
-define( 'MFSD_TICKER_DB_VERSION', '2.1.0' );
+define( 'MFSD_TICKER_DB_VERSION', '2.2.0' );
 
 /**
  * Create the ticker messages table on plugin activation.
@@ -43,6 +46,9 @@ function mfsd_ticker_create_table(): void {
         message_type   VARCHAR(20)   NOT NULL DEFAULT 'standard',
         course_id      BIGINT        NOT NULL DEFAULT 0,
         target_user_id BIGINT        NOT NULL DEFAULT 0,
+        feed_url       VARCHAR(1000) NOT NULL DEFAULT '',
+        feed_limit     TINYINT       NOT NULL DEFAULT 5,
+        feed_prefix    VARCHAR(200)  NOT NULL DEFAULT '',
         active         TINYINT(1)    NOT NULL DEFAULT 1,
         sort_order     INT           NOT NULL DEFAULT 0,
         created_at     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -81,6 +87,15 @@ function mfsd_ticker_maybe_upgrade(): void {
     if ( ! in_array( 'target_user_id', $columns, true ) ) {
         $wpdb->query( "ALTER TABLE {$table} ADD COLUMN target_user_id BIGINT NOT NULL DEFAULT 0 AFTER course_id" );
     }
+    if ( ! in_array( 'feed_url', $columns, true ) ) {
+        $wpdb->query( "ALTER TABLE {$table} ADD COLUMN feed_url VARCHAR(1000) NOT NULL DEFAULT '' AFTER target_user_id" );
+    }
+    if ( ! in_array( 'feed_limit', $columns, true ) ) {
+        $wpdb->query( "ALTER TABLE {$table} ADD COLUMN feed_limit TINYINT NOT NULL DEFAULT 5 AFTER feed_url" );
+    }
+    if ( ! in_array( 'feed_prefix', $columns, true ) ) {
+        $wpdb->query( "ALTER TABLE {$table} ADD COLUMN feed_prefix VARCHAR(200) NOT NULL DEFAULT '' AFTER feed_limit" );
+    }
 
     update_option( 'mfsd_ticker_db_version', MFSD_TICKER_DB_VERSION );
 }
@@ -103,10 +118,13 @@ function mfsd_ticker_seed_default(): void {
                 'message_type'   => 'standard',
                 'course_id'      => 0,
                 'target_user_id' => 0,
+                'feed_url'       => '',
+                'feed_limit'     => 5,
+                'feed_prefix'    => '',
                 'active'         => 1,
                 'sort_order'     => 0,
             ],
-            [ '%s', '%s', '%s', '%d', '%d', '%d', '%d' ]
+            [ '%s', '%s', '%s', '%d', '%d', '%s', '%d', '%s', '%d', '%d' ]
         );
     }
 }
@@ -153,6 +171,73 @@ function mfsd_ticker_resolve_tokens( string $message, WP_User $user, int $course
     ];
 
     return str_replace( array_keys( $replacements ), array_values( $replacements ), $message );
+}
+
+
+// ─── RSS FEED HELPERS ─────────────────────────────────────────────────────────
+
+/**
+ * Fetch headlines from an RSS feed URL.
+ *
+ * Results are cached in a WordPress transient for 30 minutes so the feed is
+ * not requested on every page load. Uses WP's built-in SimplePie integration.
+ *
+ * @param string $feed_url    Full URL of the RSS/Atom feed.
+ * @param int    $limit       Max number of headlines to return (1–20).
+ * @param string $prefix      Optional prefix prepended to each headline, e.g. "📰 BBC:".
+ * @return string[]           Array of plain-text headline strings, ready for esc_html().
+ */
+function mfsd_ticker_fetch_rss_headlines( string $feed_url, int $limit = 5, string $prefix = '' ): array {
+    if ( empty( $feed_url ) ) {
+        return [];
+    }
+
+    $limit        = max( 1, min( 20, $limit ) );
+    $transient_key = 'mfsd_rss_' . md5( $feed_url . $limit );
+
+    $cached = get_transient( $transient_key );
+    if ( is_array( $cached ) ) {
+        return $cached;
+    }
+
+    // WordPress includes SimplePie via fetch_feed().
+    if ( ! function_exists( 'fetch_feed' ) ) {
+        require_once ABSPATH . WPINC . '/feed.php';
+    }
+
+    $feed = fetch_feed( $feed_url );
+
+    if ( is_wp_error( $feed ) ) {
+        // Cache an empty result for 5 minutes to avoid hammering a broken feed.
+        set_transient( $transient_key, [], 5 * MINUTE_IN_SECONDS );
+        return [];
+    }
+
+    $feed->set_cache_duration( 30 * MINUTE_IN_SECONDS );
+    $max_items = $feed->get_item_quantity( $limit );
+    $items     = $feed->get_items( 0, $max_items );
+
+    $headlines = [];
+    $prefix    = trim( $prefix );
+    foreach ( $items as $item ) {
+        $title = wp_strip_all_tags( $item->get_title() );
+        if ( $title ) {
+            $headlines[] = $prefix !== '' ? $prefix . ' ' . $title : $title;
+        }
+    }
+
+    set_transient( $transient_key, $headlines, 30 * MINUTE_IN_SECONDS );
+    return $headlines;
+}
+
+/**
+ * Clear the RSS cache for a given feed URL (called on save/update).
+ *
+ * @param string $feed_url
+ * @param int    $limit
+ */
+function mfsd_ticker_clear_rss_cache( string $feed_url, int $limit = 5 ): void {
+    delete_transient( 'mfsd_rss_' . md5( $feed_url . $limit ) );
 }
 
 
@@ -224,7 +309,15 @@ function mfsd_ticker_get_messages_for_user( string $current_role, WP_User $user 
             continue;
         }
 
-        // ── 3. Standard role-based ────────────────────────────────────────────
+        // ── 3. RSS feed — role-gated, headlines resolved at render time ───────
+        if ( $type === 'rss_feed' ) {
+            if ( in_array( 'all', $roles, true ) || in_array( $current_role, $roles, true ) ) {
+                $visible[] = $msg;
+            }
+            continue;
+        }
+
+        // ── 4. Standard role-based ────────────────────────────────────────────
         if ( in_array( 'all', $roles, true ) || in_array( $current_role, $roles, true ) ) {
             $visible[] = $msg;
         }
@@ -292,9 +385,12 @@ function mfsd_ticker_get_message( int $id ): ?array {
  * @param array  $roles
  * @param int    $active
  * @param int    $sort_order
- * @param string $message_type    'standard' | 'course_enrolment'
+ * @param string $message_type    'standard' | 'course_enrolment' | 'user_specific' | 'rss_feed'
  * @param int    $course_id       Post ID of course (0 if not applicable)
  * @param int    $target_user_id  WP user ID (0 = no restriction)
+ * @param string $feed_url        RSS feed URL (rss_feed type only)
+ * @param int    $feed_limit      Max headlines (1–20)
+ * @param string $feed_prefix     Optional prefix label
  * @return int|false
  */
 function mfsd_ticker_insert_message(
@@ -304,7 +400,10 @@ function mfsd_ticker_insert_message(
     int    $sort_order     = 0,
     string $message_type   = 'standard',
     int    $course_id      = 0,
-    int    $target_user_id = 0
+    int    $target_user_id = 0,
+    string $feed_url       = '',
+    int    $feed_limit     = 5,
+    string $feed_prefix    = ''
 ) {
     global $wpdb;
     $table  = $wpdb->prefix . MFSD_TICKER_TABLE;
@@ -316,10 +415,13 @@ function mfsd_ticker_insert_message(
             'message_type'   => $message_type,
             'course_id'      => $course_id,
             'target_user_id' => $target_user_id,
+            'feed_url'       => $feed_url,
+            'feed_limit'     => $feed_limit,
+            'feed_prefix'    => $feed_prefix,
             'active'         => $active,
             'sort_order'     => $sort_order,
         ],
-        [ '%s', '%s', '%s', '%d', '%d', '%d', '%d' ]
+        [ '%s', '%s', '%s', '%d', '%d', '%s', '%d', '%s', '%d', '%d' ]
     );
     return $result ? $wpdb->insert_id : false;
 }
@@ -335,6 +437,9 @@ function mfsd_ticker_insert_message(
  * @param string $message_type
  * @param int    $course_id
  * @param int    $target_user_id
+ * @param string $feed_url
+ * @param int    $feed_limit
+ * @param string $feed_prefix
  * @return bool
  */
 function mfsd_ticker_update_message(
@@ -345,10 +450,19 @@ function mfsd_ticker_update_message(
     int    $sort_order,
     string $message_type   = 'standard',
     int    $course_id      = 0,
-    int    $target_user_id = 0
+    int    $target_user_id = 0,
+    string $feed_url       = '',
+    int    $feed_limit     = 5,
+    string $feed_prefix    = ''
 ): bool {
     global $wpdb;
     $table  = $wpdb->prefix . MFSD_TICKER_TABLE;
+
+    // Clear cached headlines when a feed entry is updated.
+    if ( $message_type === 'rss_feed' && $feed_url ) {
+        mfsd_ticker_clear_rss_cache( $feed_url, $feed_limit );
+    }
+
     $result = $wpdb->update(
         $table,
         [
@@ -357,11 +471,14 @@ function mfsd_ticker_update_message(
             'message_type'   => $message_type,
             'course_id'      => $course_id,
             'target_user_id' => $target_user_id,
+            'feed_url'       => $feed_url,
+            'feed_limit'     => $feed_limit,
+            'feed_prefix'    => $feed_prefix,
             'active'         => $active,
             'sort_order'     => $sort_order,
         ],
         [ 'id' => $id ],
-        [ '%s', '%s', '%s', '%d', '%d', '%d', '%d' ],
+        [ '%s', '%s', '%s', '%d', '%d', '%s', '%d', '%s', '%d', '%d' ],
         [ '%d' ]
     );
     return $result !== false;

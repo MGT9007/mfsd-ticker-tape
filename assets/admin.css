@@ -109,6 +109,31 @@
   color: #dbaaf5;
 }
 
+.mfsd-ticker-admin__type-badge--rss_feed {
+  background: #7a3200;
+  color: #ffc87a;
+}
+
+/* ── RSS feed form options ───────────────────────────────────────────────── */
+
+.mfsd-ticker-admin__rss-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin-top: 14px;
+}
+
+.mfsd-ticker-admin__rss-option {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mfsd-ticker-admin__rss-option label {
+  font-weight: 600;
+  font-size: 13px;
+}
+
 .mfsd-ticker-admin__target-info {
   display: block;
   margin-top: 4px;

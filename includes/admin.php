@@ -1,712 +1,124 @@
 <?php
 /**
- * MFSD Ticker Tape — Admin Screen
+ * MFSD Ticker Tape — Frontend
  *
- * Adds a submenu under the MFSD admin group (or top-level if not present).
- * Admin can:
- *   - View all ticker messages with status, type, roles, and order
- *   - Add / edit / delete messages
- *   - Toggle active/paused
- *   - Set display order
- *   - Choose message type: Standard | Course Enrolment | User-Specific
- *   - Use personalisation tokens ({first_name} etc.)
+ * Hooks into do_action('mfsd_ticker_tape_bar') which is called from
+ * the theme's header.php inside .mfsd-ticker-zone.
+ *
+ * The theme provides the outer structural wrapper and CSS variables.
+ * This plugin renders the full .mfsd-ticker element inside that zone.
  */
 
 defined( 'ABSPATH' ) || exit;
 
 
-// ─── MENU REGISTRATION ───────────────────────────────────────────────────────
+// ─── HOOK INTO THEME ─────────────────────────────────────────────────────────
 
-add_action( 'admin_menu', 'mfsd_ticker_register_menu' );
-function mfsd_ticker_register_menu(): void {
+add_action( 'mfsd_ticker_tape_bar', 'mfsd_ticker_render_frontend' );
 
-    if ( ! mfsd_ticker_mfsd_menu_exists() ) {
-        add_menu_page(
-            __( 'MFSD Ticker Tape', 'mfsd-ticker-tape' ),
-            __( 'MFSD Ticker', 'mfsd-ticker-tape' ),
-            'manage_options',
-            'mfsd-ticker-tape',
-            'mfsd_ticker_render_admin_page',
-            'dashicons-megaphone',
-            58
-        );
+function mfsd_ticker_render_frontend(): void {
+
+    // Only render for logged-in users.
+    if ( ! is_user_logged_in() ) {
+        return;
+    }
+
+    // Only display on the home page.
+    if ( ! is_front_page() ) {
+        return;
+    }
+
+    $user = wp_get_current_user();
+
+    // Get the current user's MFSD role.
+    // Uses the theme helper if available, falls back to WordPress native.
+    if ( function_exists( 'mfsd_get_user_role' ) ) {
+        $role = mfsd_get_user_role();
     } else {
-        add_submenu_page(
-            'mfsd-admin',
-            __( 'Ticker Tape', 'mfsd-ticker-tape' ),
-            __( 'Ticker Tape', 'mfsd-ticker-tape' ),
-            'manage_options',
-            'mfsd-ticker-tape',
-            'mfsd_ticker_render_admin_page'
-        );
-    }
-}
-
-function mfsd_ticker_mfsd_menu_exists(): bool {
-    global $menu;
-    if ( ! is_array( $menu ) ) return false;
-    foreach ( $menu as $item ) {
-        if ( isset( $item[2] ) && $item[2] === 'mfsd-admin' ) return true;
-    }
-    return false;
-}
-
-
-// ─── ADMIN ASSETS ────────────────────────────────────────────────────────────
-
-add_action( 'admin_enqueue_scripts', 'mfsd_ticker_admin_assets' );
-function mfsd_ticker_admin_assets( string $hook ): void {
-    // Only load on our page.
-    if ( strpos( $hook, 'mfsd-ticker-tape' ) === false ) return;
-
-    wp_enqueue_style(
-        'mfsd-ticker-admin',
-        MFSD_TICKER_URI . 'assets/css/admin.css',
-        [],
-        MFSD_TICKER_VERSION
-    );
-
-    // Inline JS for dynamic form sections + user search.
-    wp_add_inline_script( 'jquery', mfsd_ticker_admin_inline_js() );
-}
-
-/**
- * Inline JS — no separate file needed for these small helpers.
- */
-function mfsd_ticker_admin_inline_js(): string {
-    return <<<'JS'
-jQuery(function($){
-
-    // ── Show/hide sections based on message type ──────────────────────────
-    function mfsdUpdateTypeUI() {
-        var type = $('input[name="message_type"]:checked').val();
-        $('.mfsd-ticker-admin__section--roles').toggle(type !== 'user_specific');
-        $('.mfsd-ticker-admin__section--course').toggle(type === 'course_enrolment');
-        $('.mfsd-ticker-admin__section--user').toggle(type === 'user_specific');
+        $roles = (array) $user->roles;
+        if ( in_array( 'administrator', $roles, true ) )     $role = 'admin';
+        elseif ( in_array( 'teacher', $roles, true ) )       $role = 'teacher';
+        elseif ( in_array( 'parent', $roles, true ) )        $role = 'parent';
+        elseif ( in_array( 'student', $roles, true ) )       $role = 'student';
+        else                                                  $role = 'parent';
     }
 
-    $('input[name="message_type"]').on('change', mfsdUpdateTypeUI);
-    mfsdUpdateTypeUI();
+    // Get messages for this user (role + course enrolment + user-specific).
+    $messages = mfsd_ticker_get_messages_for_user( $role, $user );
 
-    // ── Live user search ──────────────────────────────────────────────────
-    var userTimer;
-    $('#mfsd_user_search').on('input', function(){
-        var q = $(this).val().trim();
-        clearTimeout(userTimer);
-        if (q.length < 2) { $('#mfsd_user_results').empty().hide(); return; }
-        userTimer = setTimeout(function(){
-            $.post(ajaxurl, {
-                action: 'mfsd_ticker_user_search',
-                nonce:  mfsdTicker.nonce,
-                q:      q
-            }, function(res){
-                var $ul = $('#mfsd_user_results').empty();
-                if (!res.success || !res.data.length) {
-                    $ul.append('<li class="mfsd-no-results">No users found</li>').show();
-                    return;
-                }
-                $.each(res.data, function(i, u){
-                    $('<li>').text(u.label).attr('data-id', u.id)
-                        .on('click', function(){
-                            $('#mfsd_target_user_id').val(u.id);
-                            $('#mfsd_user_search').val(u.label);
-                            $ul.empty().hide();
-                        }).appendTo($ul);
-                });
-                $ul.show();
-            });
-        }, 300);
-    });
-
-    // ── Insert token into textarea ────────────────────────────────────────
-    $(document).on('click', '.mfsd-token-btn', function(){
-        var token = $(this).data('token');
-        var $ta   = $('#mfsd_ticker_message')[0];
-        var start = $ta.selectionStart, end = $ta.selectionEnd;
-        var val   = $ta.value;
-        $ta.value = val.slice(0, start) + token + val.slice(end);
-        $ta.focus();
-        $ta.selectionStart = $ta.selectionEnd = start + token.length;
-    });
-
-    // ── Clear user selection ──────────────────────────────────────────────
-    $('#mfsd_clear_user').on('click', function(){
-        $('#mfsd_target_user_id').val('0');
-        $('#mfsd_user_search').val('');
-        $('#mfsd_user_results').empty().hide();
-    });
-
-    // Close user dropdown when clicking outside.
-    $(document).on('click', function(e){
-        if (!$(e.target).closest('.mfsd-ticker-admin__user-search-wrap').length) {
-            $('#mfsd_user_results').empty().hide();
-        }
-    });
-
-});
-JS;
-}
-
-
-// ─── AJAX: USER SEARCH ───────────────────────────────────────────────────────
-
-add_action( 'wp_ajax_mfsd_ticker_user_search', 'mfsd_ticker_ajax_user_search' );
-function mfsd_ticker_ajax_user_search(): void {
-    check_ajax_referer( 'mfsd_ticker_admin_nonce', 'nonce' );
-
-    if ( ! current_user_can( 'manage_options' ) ) {
-        wp_send_json_error( [], 403 );
+    // If no messages, render nothing — the theme's :empty CSS hides the zone.
+    if ( empty( $messages ) ) {
+        return;
     }
 
-    $q = sanitize_text_field( $_POST['q'] ?? '' );
-    if ( strlen( $q ) < 2 ) {
-        wp_send_json_success( [] );
-    }
+    // Build the scrolling text — resolve tokens per message then join.
+    $separator = ' &nbsp;&nbsp;&bull;&nbsp;&nbsp; ';
+    $texts     = [];
+    foreach ( array_values( $messages ) as $msg ) {
+        $type      = $msg['message_type'] ?? 'standard';
+        $course_id = (int) ( $msg['course_id'] ?? 0 );
 
-    $users = get_users( [
-        'search'         => '*' . $q . '*',
-        'search_columns' => [ 'user_login', 'user_email', 'display_name', 'user_nicename' ],
-        'number'         => 10,
-        'fields'         => [ 'ID', 'display_name', 'user_email', 'user_login' ],
-    ] );
-
-    $results = array_map( fn( $u ) => [
-        'id'    => (int) $u->ID,
-        'label' => sprintf( '%s (%s)', $u->display_name, $u->user_email ),
-    ], $users );
-
-    wp_send_json_success( $results );
-}
-
-
-// ─── FORM HANDLING ───────────────────────────────────────────────────────────
-
-add_action( 'admin_post_mfsd_ticker_save', 'mfsd_ticker_handle_save' );
-function mfsd_ticker_handle_save(): void {
-    check_admin_referer( 'mfsd_ticker_save_message' );
-
-    if ( ! current_user_can( 'manage_options' ) ) {
-        wp_die( __( 'Unauthorised', 'mfsd-ticker-tape' ) );
-    }
-
-    $id           = isset( $_POST['message_id'] ) ? (int) $_POST['message_id'] : 0;
-    $message      = sanitize_textarea_field( $_POST['message'] ?? '' );
-    $message_type = in_array( $_POST['message_type'] ?? '', [ 'standard', 'course_enrolment', 'user_specific' ], true )
-                    ? $_POST['message_type']
-                    : 'standard';
-    $course_id      = (int) ( $_POST['course_id'] ?? 0 );
-    $target_user_id = (int) ( $_POST['target_user_id'] ?? 0 );
-    $roles_raw      = $_POST['roles'] ?? [];
-    $roles          = is_array( $roles_raw )
-                    ? array_map( 'sanitize_key', $roles_raw )
-                    : [ 'all' ];
-    $active         = isset( $_POST['active'] ) ? 1 : 0;
-    $sort_order     = (int) ( $_POST['sort_order'] ?? 0 );
-
-    if ( empty( $message ) ) {
-        wp_redirect( add_query_arg( [ 'page' => 'mfsd-ticker-tape', 'error' => 'empty' ], admin_url( 'admin.php' ) ) );
-        exit;
-    }
-
-    if ( empty( $roles ) ) {
-        $roles = [ 'all' ];
-    }
-
-    // For user-specific messages, reset role targeting.
-    if ( $message_type === 'user_specific' ) {
-        $roles     = [ 'all' ];
-        $course_id = 0;
-        if ( $target_user_id < 1 ) {
-            wp_redirect( add_query_arg( [ 'page' => 'mfsd-ticker-tape', 'error' => 'no_user' ], admin_url( 'admin.php' ) ) );
-            exit;
+        if ( $type === 'rss_feed' ) {
+            // Expand RSS feed into individual headline items.
+            $headlines = mfsd_ticker_fetch_rss_headlines(
+                $msg['feed_url']    ?? '',
+                (int) ( $msg['feed_limit']  ?? 5 ),
+                $msg['feed_prefix'] ?? ''
+            );
+            foreach ( $headlines as $headline ) {
+                $texts[] = esc_html( $headline );
+            }
+        } else {
+            // Resolve personalisation tokens then output.
+            $resolved = mfsd_ticker_resolve_tokens( $msg['message'], $user, $course_id );
+            $texts[]  = $resolved;
         }
     }
+    $scroll_content = implode( $separator, $texts );
 
-    // For course enrolment messages, reset user targeting.
-    if ( $message_type === 'course_enrolment' ) {
-        $target_user_id = 0;
-        if ( $course_id < 1 ) {
-            wp_redirect( add_query_arg( [ 'page' => 'mfsd-ticker-tape', 'error' => 'no_course' ], admin_url( 'admin.php' ) ) );
-            exit;
-        }
-    }
+    // Animation speed: base 30s + 2s per message so longer lists scroll slower.
+    $speed = 30 + ( count( $messages ) * 2 );
 
-    if ( $id > 0 ) {
-        mfsd_ticker_update_message( $id, $message, $roles, $active, $sort_order, $message_type, $course_id, $target_user_id );
-        $redirect_msg = 'updated';
-    } else {
-        mfsd_ticker_insert_message( $message, $roles, $active, $sort_order, $message_type, $course_id, $target_user_id );
-        $redirect_msg = 'added';
-    }
-
-    wp_redirect( add_query_arg( [ 'page' => 'mfsd-ticker-tape', 'msg' => $redirect_msg ], admin_url( 'admin.php' ) ) );
-    exit;
-}
-
-add_action( 'admin_post_mfsd_ticker_delete', 'mfsd_ticker_handle_delete' );
-function mfsd_ticker_handle_delete(): void {
-    check_admin_referer( 'mfsd_ticker_delete_message' );
-
-    if ( ! current_user_can( 'manage_options' ) ) {
-        wp_die( __( 'Unauthorised', 'mfsd-ticker-tape' ) );
-    }
-
-    $id = (int) ( $_GET['id'] ?? 0 );
-    if ( $id > 0 ) {
-        mfsd_ticker_delete_message( $id );
-    }
-
-    wp_redirect( add_query_arg( [ 'page' => 'mfsd-ticker-tape', 'msg' => 'deleted' ], admin_url( 'admin.php' ) ) );
-    exit;
-}
-
-add_action( 'admin_post_mfsd_ticker_toggle', 'mfsd_ticker_handle_toggle' );
-function mfsd_ticker_handle_toggle(): void {
-    check_admin_referer( 'mfsd_ticker_toggle_message' );
-
-    if ( ! current_user_can( 'manage_options' ) ) {
-        wp_die( __( 'Unauthorised', 'mfsd-ticker-tape' ) );
-    }
-
-    $id = (int) ( $_GET['id'] ?? 0 );
-    if ( $id > 0 ) {
-        mfsd_ticker_toggle_active( $id );
-    }
-
-    wp_redirect( add_query_arg( [ 'page' => 'mfsd-ticker-tape', 'msg' => 'toggled' ], admin_url( 'admin.php' ) ) );
-    exit;
-}
-
-
-// ─── HELPERS ─────────────────────────────────────────────────────────────────
-
-function mfsd_ticker_available_roles(): array {
-    return [
-        'all'           => __( 'Everyone (all roles)', 'mfsd-ticker-tape' ),
-        'student'       => __( 'Student', 'mfsd-ticker-tape' ),
-        'parent'        => __( 'Parent', 'mfsd-ticker-tape' ),
-        'teacher'       => __( 'Teacher', 'mfsd-ticker-tape' ),
-        'administrator' => __( 'Administrator', 'mfsd-ticker-tape' ),
-    ];
-}
-
-/**
- * Return published courses for the course dropdown.
- * Supports LearnDash (sfwd-courses) and a generic 'course' post type.
- *
- * @return WP_Post[]
- */
-function mfsd_ticker_get_courses(): array {
-    $types = [];
-    if ( post_type_exists( 'sfwd-courses' ) ) $types[] = 'sfwd-courses';
-    if ( post_type_exists( 'course' ) )       $types[] = 'course';
-    if ( empty( $types ) )                    return [];
-
-    return get_posts( [
-        'post_type'      => $types,
-        'post_status'    => 'publish',
-        'posts_per_page' => -1,
-        'orderby'        => 'title',
-        'order'          => 'ASC',
-    ] );
-}
-
-/**
- * Human-readable label for a message type.
- */
-function mfsd_ticker_type_label( string $type ): string {
-    return match ( $type ) {
-        'course_enrolment' => __( 'Course Enrolment', 'mfsd-ticker-tape' ),
-        'user_specific'    => __( 'User Specific', 'mfsd-ticker-tape' ),
-        default            => __( 'Standard', 'mfsd-ticker-tape' ),
-    };
-}
-
-
-// ─── ADMIN PAGE RENDER ────────────────────────────────────────────────────────
-
-function mfsd_ticker_render_admin_page(): void {
-    $messages  = mfsd_ticker_get_all_messages();
-    $edit_id   = isset( $_GET['edit'] ) ? (int) $_GET['edit'] : 0;
-    $edit_msg  = $edit_id ? mfsd_ticker_get_message( $edit_id ) : null;
-    $all_roles = mfsd_ticker_available_roles();
-    $courses   = mfsd_ticker_get_courses();
-    $tokens    = mfsd_ticker_available_tokens();
-
-    // Pass nonce to inline JS.
-    $nonce = wp_create_nonce( 'mfsd_ticker_admin_nonce' );
-    echo "<script>var mfsdTicker = { nonce: '" . esc_js( $nonce ) . "' };</script>";
-
-    // Status notices.
-    $notice = '';
-    if ( isset( $_GET['msg'] ) ) {
-        $notices = [
-            'added'   => [ 'success', __( 'Message added.', 'mfsd-ticker-tape' ) ],
-            'updated' => [ 'success', __( 'Message updated.', 'mfsd-ticker-tape' ) ],
-            'deleted' => [ 'success', __( 'Message deleted.', 'mfsd-ticker-tape' ) ],
-            'toggled' => [ 'success', __( 'Message status toggled.', 'mfsd-ticker-tape' ) ],
-        ];
-        $key = sanitize_key( $_GET['msg'] );
-        if ( isset( $notices[ $key ] ) ) $notice = $notices[ $key ];
-    }
-    $error_map = [
-        'empty'     => __( 'Message text cannot be empty.', 'mfsd-ticker-tape' ),
-        'no_user'   => __( 'Please select a user for a user-specific message.', 'mfsd-ticker-tape' ),
-        'no_course' => __( 'Please select a course for a course enrolment message.', 'mfsd-ticker-tape' ),
-    ];
-    if ( isset( $_GET['error'] ) ) {
-        $ekey = sanitize_key( $_GET['error'] );
-        if ( isset( $error_map[ $ekey ] ) ) $notice = [ 'error', $error_map[ $ekey ] ];
-    }
-
-    // Form defaults (editing or blank).
-    $form = [
-        'id'             => $edit_id,
-        'message'        => $edit_msg['message']              ?? '',
-        'roles'          => $edit_msg ? json_decode( $edit_msg['roles'], true ) : [ 'all' ],
-        'message_type'   => $edit_msg['message_type']         ?? 'standard',
-        'course_id'      => (int) ( $edit_msg['course_id']    ?? 0 ),
-        'target_user_id' => (int) ( $edit_msg['target_user_id'] ?? 0 ),
-        'active'         => $edit_msg ? (int) $edit_msg['active'] : 1,
-        'sort_order'     => (int) ( $edit_msg['sort_order']   ?? 0 ),
-    ];
-
-    // Pre-populate user display name for editing.
-    $target_user_label = '';
-    if ( $form['target_user_id'] > 0 ) {
-        $tu = get_user_by( 'id', $form['target_user_id'] );
-        if ( $tu ) {
-            $target_user_label = sprintf( '%s (%s)', $tu->display_name, $tu->user_email );
-        }
-    }
+    // Icon — differs between gamer and corporate themes.
+    $is_student = ( $role === 'student' );
+    $icon       = $is_student ? '⚡' : '★';
     ?>
 
-    <div class="wrap mfsd-ticker-admin" id="mfsd-ticker-admin">
+    <div class="mfsd-ticker" role="marquee" aria-label="<?php esc_attr_e( 'Latest news and updates', 'mfsd-ticker-tape' ); ?>">
 
-      <h1 class="mfsd-ticker-admin__title">
-        <span class="dashicons dashicons-megaphone"></span>
-        <?php esc_html_e( 'MFSD Ticker Tape', 'mfsd-ticker-tape' ); ?>
-      </h1>
-
-      <?php if ( $notice ) : ?>
-        <div class="notice notice-<?php echo esc_attr( $notice[0] ); ?> is-dismissible">
-          <p><?php echo esc_html( $notice[1] ); ?></p>
-        </div>
-      <?php endif; ?>
-
-      <div class="mfsd-ticker-admin__layout">
-
-        <?php /* ── TOP: Message list ────────────────────────────────────── */ ?>
-        <div class="mfsd-ticker-admin__list-col">
-
-          <h2><?php esc_html_e( 'All Messages', 'mfsd-ticker-tape' ); ?></h2>
-
-          <?php if ( empty( $messages ) ) : ?>
-            <p><?php esc_html_e( 'No messages yet. Add one using the form.', 'mfsd-ticker-tape' ); ?></p>
-          <?php else : ?>
-
-            <table class="widefat mfsd-ticker-admin__table">
-              <thead>
-                <tr>
-                  <th><?php esc_html_e( 'Order', 'mfsd-ticker-tape' ); ?></th>
-                  <th><?php esc_html_e( 'Message', 'mfsd-ticker-tape' ); ?></th>
-                  <th><?php esc_html_e( 'Type / Target', 'mfsd-ticker-tape' ); ?></th>
-                  <th><?php esc_html_e( 'Status', 'mfsd-ticker-tape' ); ?></th>
-                  <th><?php esc_html_e( 'Actions', 'mfsd-ticker-tape' ); ?></th>
-                </tr>
-              </thead>
-              <tbody>
-                <?php foreach ( $messages as $msg ) :
-                    $msg_roles    = json_decode( $msg['roles'], true ) ?: [ 'all' ];
-                    $role_labels  = array_map( fn( $r ) => $all_roles[ $r ] ?? $r, $msg_roles );
-                    $is_active    = (int) $msg['active'] === 1;
-                    $mtype        = $msg['message_type'] ?? 'standard';
-                    $tuid         = (int) ( $msg['target_user_id'] ?? 0 );
-                    $mcid         = (int) ( $msg['course_id'] ?? 0 );
-
-                    // Build a readable target string.
-                    if ( $mtype === 'user_specific' && $tuid > 0 ) {
-                        $tu = get_user_by( 'id', $tuid );
-                        $target_display = $tu
-                            ? sprintf( '👤 %s', esc_html( $tu->display_name ) )
-                            : sprintf( '👤 User #%d', $tuid );
-                    } elseif ( $mtype === 'course_enrolment' && $mcid > 0 ) {
-                        $cp = get_post( $mcid );
-                        $target_display = $cp
-                            ? sprintf( '🎓 %s', esc_html( $cp->post_title ) )
-                            : sprintf( '🎓 Course #%d', $mcid );
-                    } else {
-                        $target_display = implode( ', ', $role_labels );
-                    }
-                ?>
-                  <tr class="<?php echo $is_active ? 'mfsd-ticker-admin__row--active' : 'mfsd-ticker-admin__row--paused'; ?>">
-                    <td class="mfsd-ticker-admin__order"><?php echo esc_html( $msg['sort_order'] ); ?></td>
-                    <td class="mfsd-ticker-admin__message-text">
-                      <?php echo esc_html( $msg['message'] ); ?>
-                    </td>
-                    <td>
-                      <span class="mfsd-ticker-admin__type-badge mfsd-ticker-admin__type-badge--<?php echo esc_attr( $mtype ); ?>">
-                        <?php echo esc_html( mfsd_ticker_type_label( $mtype ) ); ?>
-                      </span><br>
-                      <small class="mfsd-ticker-admin__target-info"><?php echo $target_display; ?></small>
-                    </td>
-                    <td>
-                      <span class="mfsd-ticker-admin__status mfsd-ticker-admin__status--<?php echo $is_active ? 'live' : 'paused'; ?>">
-                        <?php echo $is_active ? esc_html__( 'Live', 'mfsd-ticker-tape' ) : esc_html__( 'Paused', 'mfsd-ticker-tape' ); ?>
-                      </span>
-                    </td>
-                    <td class="mfsd-ticker-admin__actions">
-                      <a href="<?php echo esc_url( add_query_arg( [ 'page' => 'mfsd-ticker-tape', 'edit' => $msg['id'] ], admin_url( 'admin.php' ) ) ); ?>"
-                         class="button button-small">
-                        <?php esc_html_e( 'Edit', 'mfsd-ticker-tape' ); ?>
-                      </a>
-                      <a href="<?php echo esc_url( wp_nonce_url(
-                          add_query_arg( [ 'action' => 'mfsd_ticker_toggle', 'id' => $msg['id'] ], admin_url( 'admin-post.php' ) ),
-                          'mfsd_ticker_toggle_message'
-                      ) ); ?>" class="button button-small">
-                        <?php echo $is_active ? esc_html__( 'Pause', 'mfsd-ticker-tape' ) : esc_html__( 'Activate', 'mfsd-ticker-tape' ); ?>
-                      </a>
-                      <a href="<?php echo esc_url( wp_nonce_url(
-                          add_query_arg( [ 'action' => 'mfsd_ticker_delete', 'id' => $msg['id'] ], admin_url( 'admin-post.php' ) ),
-                          'mfsd_ticker_delete_message'
-                      ) ); ?>"
-                         class="button button-small mfsd-ticker-admin__btn-delete"
-                         onclick="return confirm('<?php esc_attr_e( 'Delete this message? This cannot be undone.', 'mfsd-ticker-tape' ); ?>')">
-                        <?php esc_html_e( 'Delete', 'mfsd-ticker-tape' ); ?>
-                      </a>
-                    </td>
-                  </tr>
-                <?php endforeach; ?>
-              </tbody>
-            </table>
-
-          <?php endif; ?>
-
-        </div><?php /* end list col */ ?>
-
-        <?php /* ── BELOW: Add / Edit form (full width) ────────────────── */ ?>
-        <div class="mfsd-ticker-admin__form-col">
-
-          <h2>
-            <?php echo $edit_id
-              ? esc_html__( 'Edit Message', 'mfsd-ticker-tape' )
-              : esc_html__( 'Add New Message', 'mfsd-ticker-tape' );
-            ?>
-          </h2>
-
-          <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-            <?php wp_nonce_field( 'mfsd_ticker_save_message' ); ?>
-            <input type="hidden" name="action"     value="mfsd_ticker_save">
-            <input type="hidden" name="message_id" value="<?php echo esc_attr( $form['id'] ); ?>">
-
-            <?php /* ── Message Type ── */ ?>
-            <div class="mfsd-ticker-admin__field">
-              <label><?php esc_html_e( 'Message Type', 'mfsd-ticker-tape' ); ?></label>
-              <div class="mfsd-ticker-admin__type-radios">
-                <?php
-                $types = [
-                    'standard'         => __( '📢 Standard — show by role', 'mfsd-ticker-tape' ),
-                    'course_enrolment' => __( '🎓 Course Enrolment — show to enrolled users', 'mfsd-ticker-tape' ),
-                    'user_specific'    => __( '👤 User Specific — show to one user only', 'mfsd-ticker-tape' ),
-                ];
-                foreach ( $types as $tval => $tlabel ) : ?>
-                  <label class="mfsd-ticker-admin__role-check">
-                    <input type="radio"
-                           name="message_type"
-                           value="<?php echo esc_attr( $tval ); ?>"
-                           <?php checked( $form['message_type'], $tval ); ?>>
-                    <?php echo esc_html( $tlabel ); ?>
-                  </label>
-                <?php endforeach; ?>
-              </div>
-            </div>
-
-            <?php /* ── Message Text ── */ ?>
-            <div class="mfsd-ticker-admin__field">
-              <label for="mfsd_ticker_message">
-                <?php esc_html_e( 'Message Text', 'mfsd-ticker-tape' ); ?>
-                <span class="required">*</span>
-              </label>
-              <textarea id="mfsd_ticker_message"
-                        name="message"
-                        rows="4"
-                        maxlength="500"
-                        required><?php echo esc_textarea( $form['message'] ); ?></textarea>
-              <p class="description">
-                <?php esc_html_e( 'You can use emoji for visual flair, e.g. 🚀 🔥 🎮', 'mfsd-ticker-tape' ); ?>
-              </p>
-            </div>
-
-            <?php /* ── Token helper ── */ ?>
-            <div class="mfsd-ticker-admin__field mfsd-ticker-admin__token-panel">
-              <label><?php esc_html_e( 'Personalisation Tokens', 'mfsd-ticker-tape' ); ?></label>
-              <p class="description" style="margin-bottom:8px;">
-                <?php esc_html_e( 'Click a token to insert it at the cursor position in the message.', 'mfsd-ticker-tape' ); ?>
-              </p>
-              <div class="mfsd-ticker-admin__token-buttons">
-                <?php foreach ( $tokens as $token => $desc ) : ?>
-                  <button type="button"
-                          class="button button-small mfsd-token-btn"
-                          data-token="<?php echo esc_attr( $token ); ?>"
-                          title="<?php echo esc_attr( $desc ); ?>">
-                    <?php echo esc_html( $token ); ?>
-                  </button>
-                <?php endforeach; ?>
-              </div>
-              <table class="mfsd-ticker-admin__token-table">
-                <?php foreach ( $tokens as $token => $desc ) : ?>
-                  <tr>
-                    <td><code><?php echo esc_html( $token ); ?></code></td>
-                    <td><?php echo esc_html( $desc ); ?></td>
-                  </tr>
-                <?php endforeach; ?>
-              </table>
-            </div>
-
-            <?php /* ── Roles (standard only) ── */ ?>
-            <div class="mfsd-ticker-admin__field mfsd-ticker-admin__section--roles">
-              <label><?php esc_html_e( 'Show to', 'mfsd-ticker-tape' ); ?></label>
-              <div class="mfsd-ticker-admin__roles">
-                <?php foreach ( $all_roles as $slug => $label ) : ?>
-                  <label class="mfsd-ticker-admin__role-check">
-                    <input type="checkbox"
-                           name="roles[]"
-                           value="<?php echo esc_attr( $slug ); ?>"
-                           <?php checked( in_array( $slug, (array) $form['roles'], true ) ); ?>>
-                    <?php echo esc_html( $label ); ?>
-                  </label>
-                <?php endforeach; ?>
-              </div>
-              <p class="description">
-                <?php esc_html_e( 'Tick "Everyone" to show to all roles.', 'mfsd-ticker-tape' ); ?>
-              </p>
-            </div>
-
-            <?php /* ── Course picker (course_enrolment only) ── */ ?>
-            <div class="mfsd-ticker-admin__field mfsd-ticker-admin__section--course">
-              <label for="mfsd_course_id">
-                <?php esc_html_e( 'Course', 'mfsd-ticker-tape' ); ?>
-              </label>
-              <?php if ( $courses ) : ?>
-                <select name="course_id" id="mfsd_course_id">
-                  <option value="0"><?php esc_html_e( '— Select a course —', 'mfsd-ticker-tape' ); ?></option>
-                  <?php foreach ( $courses as $course ) : ?>
-                    <option value="<?php echo esc_attr( $course->ID ); ?>"
-                            <?php selected( $form['course_id'], $course->ID ); ?>>
-                      <?php echo esc_html( $course->post_title ); ?>
-                    </option>
-                  <?php endforeach; ?>
-                </select>
-                <p class="description">
-                  <?php esc_html_e( 'Message is shown only to users enrolled in this course. Use {course_name} token in the message text.', 'mfsd-ticker-tape' ); ?>
-                </p>
-              <?php else : ?>
-                <p class="description" style="color:#b32d2e;">
-                  <?php esc_html_e( 'No published courses found. Install LearnDash or another supported LMS and publish a course.', 'mfsd-ticker-tape' ); ?>
-                </p>
-                <input type="hidden" name="course_id" value="0">
-              <?php endif; ?>
-            </div>
-
-            <?php /* ── User search (user_specific only) ── */ ?>
-            <div class="mfsd-ticker-admin__field mfsd-ticker-admin__section--user">
-              <label for="mfsd_user_search">
-                <?php esc_html_e( 'Target User', 'mfsd-ticker-tape' ); ?>
-              </label>
-              <input type="hidden" name="target_user_id" id="mfsd_target_user_id"
-                     value="<?php echo esc_attr( $form['target_user_id'] ); ?>">
-              <div class="mfsd-ticker-admin__user-search-wrap">
-                <input type="text"
-                       id="mfsd_user_search"
-                       class="regular-text"
-                       placeholder="<?php esc_attr_e( 'Search by name, username or email…', 'mfsd-ticker-tape' ); ?>"
-                       autocomplete="off"
-                       value="<?php echo esc_attr( $target_user_label ); ?>">
-                <ul id="mfsd_user_results" class="mfsd-ticker-admin__user-results" style="display:none;"></ul>
-              </div>
-              <?php if ( $form['target_user_id'] > 0 ) : ?>
-                <button type="button" id="mfsd_clear_user" class="button button-small" style="margin-top:6px;">
-                  <?php esc_html_e( '✕ Clear user', 'mfsd-ticker-tape' ); ?>
-                </button>
-              <?php endif; ?>
-              <p class="description">
-                <?php esc_html_e( 'Message will only appear in the ticker for this specific user.', 'mfsd-ticker-tape' ); ?>
-              </p>
-            </div>
-
-            <?php /* ── Sort order ── */ ?>
-            <div class="mfsd-ticker-admin__field mfsd-ticker-admin__field--inline">
-              <label for="mfsd_ticker_order">
-                <?php esc_html_e( 'Display Order', 'mfsd-ticker-tape' ); ?>
-              </label>
-              <input type="number"
-                     id="mfsd_ticker_order"
-                     name="sort_order"
-                     value="<?php echo esc_attr( $form['sort_order'] ); ?>"
-                     min="0"
-                     max="999"
-                     style="width:80px;">
-              <p class="description"><?php esc_html_e( 'Lower numbers appear first.', 'mfsd-ticker-tape' ); ?></p>
-            </div>
-
-            <?php /* ── Active toggle ── */ ?>
-            <div class="mfsd-ticker-admin__field">
-              <label class="mfsd-ticker-admin__role-check">
-                <input type="checkbox"
-                       name="active"
-                       value="1"
-                       <?php checked( $form['active'], 1 ); ?>>
-                <?php esc_html_e( 'Active (live on site)', 'mfsd-ticker-tape' ); ?>
-              </label>
-            </div>
-
-            <div class="mfsd-ticker-admin__submit">
-              <button type="submit" class="button button-primary">
-                <?php echo $edit_id
-                  ? esc_html__( 'Update Message', 'mfsd-ticker-tape' )
-                  : esc_html__( 'Add Message', 'mfsd-ticker-tape' );
-                ?>
-              </button>
-              <?php if ( $edit_id ) : ?>
-                <a href="<?php echo esc_url( add_query_arg( [ 'page' => 'mfsd-ticker-tape' ], admin_url( 'admin.php' ) ) ); ?>"
-                   class="button">
-                  <?php esc_html_e( 'Cancel', 'mfsd-ticker-tape' ); ?>
-                </a>
-              <?php endif; ?>
-            </div>
-
-          </form>
-
-        </div><?php /* end form col */ ?>
-
-      </div><?php /* end layout */ ?>
-
-      <?php /* ── Preview bar ── */ ?>
-      <div class="mfsd-ticker-admin__preview-wrap">
-        <h2><?php esc_html_e( 'Live Preview', 'mfsd-ticker-tape' ); ?></h2>
-        <p class="description">
-          <?php esc_html_e( 'Shows all active messages. Tokens display as placeholders in the preview.', 'mfsd-ticker-tape' ); ?>
-        </p>
-        <div class="mfsd-ticker-admin__preview">
-          <div class="mfsd-ticker-admin__preview-label">
-            <?php esc_html_e( 'WHATS NEW AT MFS!', 'mfsd-ticker-tape' ); ?>
-          </div>
-          <div class="mfsd-ticker-admin__preview-track">
-            <span class="mfsd-ticker-admin__preview-content">
-              <?php
-              $active_messages = array_filter( $messages, fn( $m ) => (int) $m['active'] === 1 );
-              if ( $active_messages ) {
-                  $texts = array_map( fn( $m ) => esc_html( $m['message'] ), $active_messages );
-                  echo implode( ' &nbsp;&nbsp;•&nbsp;&nbsp; ', $texts );
-              } else {
-                  esc_html_e( 'No active messages — add one above.', 'mfsd-ticker-tape' );
-              }
-              ?>
-            </span>
-          </div>
-        </div>
+      <div class="mfsd-ticker__label" aria-hidden="true">
+        <span class="mfsd-ticker__label-icon"><?php echo $icon; ?></span>
+        <?php esc_html_e( 'WHATS NEW AT MFS!', 'mfsd-ticker-tape' ); ?>
+        <span class="mfsd-ticker__label-icon"><?php echo $icon; ?></span>
       </div>
 
-    </div><?php /* end wrap */ ?>
+      <div class="mfsd-ticker__track">
+        <span class="mfsd-ticker__content"
+              style="animation-duration: <?php echo esc_attr( $speed ); ?>s;"
+              aria-live="off">
+          <?php echo $scroll_content; ?>
+          <?php /* Duplicate content so the scroll loops seamlessly */ ?>
+          <?php echo $separator . $scroll_content; ?>
+        </span>
+      </div>
+
+    </div>
+
     <?php
+}
+
+
+// ─── FRONTEND ASSETS ─────────────────────────────────────────────────────────
+
+add_action( 'wp_enqueue_scripts', 'mfsd_ticker_frontend_assets' );
+function mfsd_ticker_frontend_assets(): void {
+
+    if ( ! is_user_logged_in() ) return;
+
+    wp_enqueue_style(
+        'mfsd-ticker-frontend',
+        MFSD_TICKER_URI . 'assets/css/frontend.css',
+        [ 'mfsd-base' ],  // Depends on theme base CSS for variables.
+        MFSD_TICKER_VERSION
+    );
 }
