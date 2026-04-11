@@ -4,9 +4,27 @@
  * The theme's base.css provides the structural .mfsd-ticker rules
  * and the variables.css provides all colour tokens.
  *
- * This file handles only the animation and any plugin-specific
+ * This file handles animation, fluid sizing, and plugin-specific
  * presentational details that aren't in the theme.
  */
+
+/* ── FLUID TICKER SIZING ─────────────────────────────────────────────────── */
+/* At 1440px wide the ticker scales up noticeably — bar gets taller,
+   text and label get bigger, keeping it visible and readable at full screen. */
+
+.mfsd-ticker {
+  height: clamp(36px, 2.8vw, 52px);
+}
+
+.mfsd-ticker__label {
+  font-size: clamp(11px, 0.85vw, 15px);
+  padding: 0 clamp(12px, 1.2vw, 22px);
+  letter-spacing: 0.05em;
+}
+
+.mfsd-ticker__content {
+  font-size: clamp(13px, 0.95vw, 17px);
+}
 
 /* ── SCROLL ANIMATION ────────────────────────────────────────────────────── */
 
