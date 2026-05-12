@@ -33,8 +33,8 @@
   white-space: nowrap;
   padding-left: 100%;
   animation: mfsd-ticker-scroll linear infinite;
-  /* Duration is set inline via PHP based on message count */
-  animation-duration: 30s;
+  /* Duration is set inline via PHP based on total text length; this is the fallback */
+  animation-duration: 60s;
 }
 
 .mfsd-ticker__content:hover {

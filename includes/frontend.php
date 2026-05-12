@@ -76,9 +76,10 @@ function mfsd_ticker_render_frontend(): void {
     }
     $scroll_content = implode( $separator, $texts );
 
-    // Animation speed: base 30s + 4s per item in the tape.
-    // We count actual text items (headlines expanded) not just DB rows.
-    $speed = 30 + ( count( $texts ) * 4 );
+    // Animation speed: ~0.15s per character of visible text so the scroll
+    // rate stays consistent regardless of message length. Minimum 60s.
+    $char_count = mb_strlen( wp_strip_all_tags( $scroll_content ) );
+    $speed      = max( 60, intval( $char_count * 0.15 ) );
 
     // Icon — differs between gamer and corporate themes.
     $is_student = ( $role === 'student' );
